@@ -1,4 +1,4 @@
 maunder
 =======
 
-An experimental mumble server in erlang
+An experimental mumble voip server in erlang.
