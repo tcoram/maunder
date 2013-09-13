@@ -1,7 +1,7 @@
 -module(mpb).
 -author('todd@maplefish.com').
 
--export([handle_message/3,send_message/4,encode_message/2]).
+-export([handle_message/4,send_message/4,encode_message/2]).
 -include("mumble_pb_ids.hrl").
 -include("ssl_client.hrl").
 
@@ -9,11 +9,8 @@
 send_message(Type,Msg,SendModule,State) ->
     SendModule:send(encode_message(Type,Msg),State).
 
-handle_message(<< Type:16/unsigned-big-integer, Len:32/unsigned-big-integer,
-		  Msg:Len/binary, Rest/binary >>,M,S) ->
-    handle_message(Rest,M,handle_pb(Type,Msg,M,S));
-handle_message(<<>>,_M,S) -> S;
-handle_message(_Blob,_M,S) -> S.		% didn't get everything yet. ERROR?
+handle_message(Type,Msg,M,S) ->
+    handle_pb(Type,Msg,M,S).
 
 encode_message(Type, Msg) ->
     BMsg = erlang:iolist_to_binary(Msg),

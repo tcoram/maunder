@@ -1,1 +1,1 @@
--record(state, {id,socket,vmrecording}).
+-record(state, {id,socket,vmrecording,type,next,length}).

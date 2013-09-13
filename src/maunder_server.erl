@@ -62,6 +62,7 @@ handle_call(cryptsetup, {Pid,_}, #state{cryptkeys=C}=State) ->
 
 handle_call({authenticate,User,_Pass}, {Pid,_}, 
 	    #state{users=U,lastsid=L}=State) ->
+    io:format("Authenticating~n"),
     UR=#userstate{name=User,user_id=L+1, session=L+1},
     NU=dict:store(Pid, UR, U),
     S=State#state{lastsid=L+1, users=NU},

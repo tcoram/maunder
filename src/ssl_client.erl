@@ -40,6 +40,7 @@ init([]) ->
     {ok, #state{},?MAX_IDLE_MS}.
 
 start_vrecorder(#state{vmrecording=P}=S) ->
+    io:format("start recorder~n"),
     Alive=is_pid(P) andalso is_process_alive(P),
     if Alive ->
 	    S;
@@ -87,15 +88,19 @@ handle_call(_Request, _From, State) ->
 handle_cast({socket,Socket}, _State) ->
     ssl:controlling_process(Socket, self()),
     ssl:ssl_accept(Socket),
-    ssl:setopts(Socket, [{active, once}]),
-    io:format("Connected~n"),
+    handle_incoming(#state{socket=Socket,vmrecording=false}),
     {noreply, #state{socket=Socket,vmrecording=false}};
 
+%    ssl:setopts(Socket, [{active, false}]),
+%    io:format("Connected~n"),
+
 handle_cast({udptunnel,Data},State) ->
+    io:format("udptunnel?~n"),
     send(mpb:encode_message(?MSG_UDPTUNNEL,Data),State),
     {noreply,State};
 
 handle_cast({textmessage,Data},State) ->
+    io:format("Text message: ~p~n",[Data]),
     T=mumble_pb:encode_textmessage(Data),
     send(mpb:encode_message(?MSG_TEXTMESSAGE,T),State),
     {noreply,State};
@@ -107,25 +112,55 @@ handle_cast({userstate,Data},State) ->
     {noreply,State};
 
 handle_cast({newuser,UR},State) ->
+    io:format("New user: ~p~n",[UR]),
     R=mumble_pb:encode_userstate(UR),
     mpb:send_message(?MSG_USERSTATE,R,?MODULE,State),
     {noreply,State};
 
 handle_cast({deluser,UR},State) ->
-%    io:format("Deleting user: ~p~n",[UR]),
+    io:format("Deleting user: ~p~n",[UR]),
     R=mumble_pb:encode_userremove(UR),
     mpb:send_message(?MSG_USERREMOVE,R,?MODULE,State),
     {noreply,State};
 
 handle_cast(_Msg, State) ->
+    io:format("Cast?~n"),
     {noreply, State}.
 
-handle_info({ssl, _S, Msg}, #state{socket=Socket}=State) ->
-    Nstate=mpb:handle_message(Msg,?MODULE,State),
-    ssl:setopts(Socket, [{active,once}]),
-    {noreply, Nstate,?MAX_IDLE_MS};
+get_type(Sock) ->
+    io:format("Get type..."),
+  case ssl:recv(Sock, 2) of
+    {ok, << T:16/unsigned-big-integer >>} ->  T;
+    {error, Reason} ->
+      exit(Reason)
+   end.
+
+get_len(Sock) ->
+    io:format("~nGet len..."),
+  case ssl:recv(Sock, 4) of
+    {ok, << Len:32/unsigned-big-integer >>} ->  Len;
+    {error, Reason} ->
+      exit(Reason)
+   end.
+
+get_payload(Sock,Len) ->
+    io:format("~nGet payload..."),
+  case ssl:recv(Sock, Len) of
+    {ok, Pay} ->  Pay;
+    {error, Reason} ->
+      exit(Reason)
+   end.
+    
+handle_incoming(#state{socket=Sock}=State) ->
+    T=get_type(Sock),
+    L=get_len(Sock),
+    Pay=get_payload(Sock,L),
+    io:format("Incoming->~p/~p/~p~n",[T,L,Pay]),
+    Nstate=mpb:handle_message(T,Pay,?MODULE,State),
+    handle_incoming(Nstate).
+
 handle_info(timeout,State) ->
-    io:format("Timeout! ~p seconds idle~n", ?MAX_IDLE_MS/1000),
+    io:format("Timeout! ~p seconds idle~n", [?MAX_IDLE_MS/1000]),
     {stop, normal, State};
 handle_info({ssl_closed, _S}, State) ->
     io:format("Disconnected!~n"),
